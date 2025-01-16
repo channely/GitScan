@@ -70,6 +70,59 @@ This document records the complete development process of the GitScan project, i
    - Improved database structure
    - Added last_analyzed field
 
+#### Phase 4: Environment Configuration and Deployment
+
+**Issue**: Encountered deployment issues on Vercel and database configuration challenges.
+
+1. Database Configuration Optimization
+   - Simplified database configuration for both local and Vercel environments
+   - Improved session management and connection handling
+   - Added proper error handling and connection cleanup
+
+2. Environment-Specific Settings
+   - Local Development:
+     ```python
+     # Uses file-based SQLite database
+     db_path = os.path.join(BASE_DIR, 'gitscan.db')
+     # Persistent repository storage
+     REPOS_DIR = os.path.join(BASE_DIR, 'repos')
+     ```
+   
+   - Vercel Environment:
+     ```python
+     # Uses in-memory SQLite database
+     db_url = 'sqlite:///:memory:'
+     # Temporary repository storage
+     REPOS_DIR = tempfile.mkdtemp()
+     ```
+
+3. Code Improvements
+   - Enhanced database session management
+   - Added cascade delete support for repositories and commits
+   - Improved error handling and transaction management
+   - Optimized database connection configuration
+
+4. Dependencies Update
+   ```
+   flask==3.0.0
+   gitpython==3.1.31
+   sqlalchemy==1.4.41
+   aiofiles==23.1.0
+   werkzeug==3.0.1
+   ```
+
+#### Current Status
+- Local development environment is functioning correctly with persistent storage
+- Database operations are properly handled with transaction support
+- Environment-specific configurations are in place
+- Pending verification of Vercel deployment
+
+#### Next Steps
+1. Test and verify local development functionality
+2. Address Vercel deployment issues
+3. Implement proper error logging for production environment
+4. Consider adding database migration support
+
 ### Technical Improvements
 
 #### Database Optimization
@@ -86,6 +139,65 @@ This document records the complete development process of the GitScan project, i
 - Standardized code structure
 - Added error handling
 - Improved documentation
+
+### Environment Configuration
+
+#### Local Development Environment
+
+1. Create `.env.local` file in project root:
+   ```env
+   VERCEL_ENV=
+   DEBUG=True
+   ```
+
+2. Local environment characteristics:
+   - Uses file-based SQLite database (`gitscan.db`)
+   - Persistent repository storage in `repos/` directory
+   - Database and repositories persist between restarts
+
+3. Database location:
+   - Database file: `gitscan.db` in project root
+   - Repository storage: `repos/` directory in project root
+
+#### Vercel Deployment Environment
+
+1. Set environment variables in Vercel project settings:
+   - Navigate to Project Settings > Environment Variables
+   - Add variable:
+     ```
+     VERCEL_ENV=production
+     ```
+
+2. Vercel environment characteristics:
+   - Uses in-memory SQLite database
+   - Temporary repository storage
+   - Data resets between deployments
+
+3. Important considerations:
+   - Data is not persistent in Vercel environment
+   - Suitable for demonstration and testing
+   - For production use, consider using persistent storage solutions
+
+#### Environment Detection
+
+The application automatically detects the environment and configures itself:
+```python
+# Database configuration
+if os.environ.get('VERCEL_ENV'):
+    # Vercel: Use in-memory database
+    DATABASE_URL = 'sqlite:///:memory:'
+else:
+    # Local: Use file database
+    DATABASE_URL = 'sqlite:///gitscan.db'
+
+# Repository storage configuration
+if os.environ.get('VERCEL_ENV'):
+    # Vercel: Use temporary directory
+    REPOS_DIR = tempfile.mkdtemp()
+else:
+    # Local: Use persistent directory
+    REPOS_DIR = os.path.join(BASE_DIR, 'repos')
+```
 
 ### Todo List
 
@@ -189,6 +301,59 @@ This document records the complete development process of the GitScan project, i
    - 改进了数据库结构
    - 添加了 last_analyzed 字段
 
+#### 阶段四：环境配置和部署
+
+**问题**: 遇到了 Vercel 部署问题和数据库配置挑战。
+
+1. 数据库配置优化
+   - 简化了数据库配置，适用于本地和 Vercel 环境
+   - 改进了会话管理和连接处理
+   - 添加了错误处理和连接清理
+
+2. 环境特定设置
+   - 本地开发：
+     ```python
+     # 使用基于文件的 SQLite 数据库
+     db_path = os.path.join(BASE_DIR, 'gitscan.db')
+     # 持久化存储仓库
+     REPOS_DIR = os.path.join(BASE_DIR, 'repos')
+     ```
+   
+   - Vercel 环境：
+     ```python
+     # 使用内存中的 SQLite 数据库
+     db_url = 'sqlite:///:memory:'
+     # 临时存储仓库
+     REPOS_DIR = tempfile.mkdtemp()
+     ```
+
+3. 代码改进
+   - 改进了数据库会话管理
+   - 添加了级联删除支持
+   - 改进了错误处理和事务管理
+   - 优化了数据库连接配置
+
+4. 依赖更新
+   ```
+   flask==3.0.0
+   gitpython==3.1.31
+   sqlalchemy==1.4.41
+   aiofiles==23.1.0
+   werkzeug==3.0.1
+   ```
+
+#### 当前状态
+- 本地开发环境正常工作，具有持久化存储
+- 数据库操作正确处理，具有事务支持
+- 环境特定配置已就绪
+- 等待 Vercel 部署验证
+
+#### 下一步
+1. 测试和验证本地开发功能
+2. 解决 Vercel 部署问题
+3. 实现生产环境错误日志记录
+4. 考虑添加数据库迁移支持
+
 ### 技术改进
 
 #### 数据库优化
@@ -205,6 +370,65 @@ This document records the complete development process of the GitScan project, i
 - 规范了代码结构
 - 添加了错误处理
 - 完善了文档注释
+
+### 环境配置
+
+#### 本地开发环境
+
+1. 在项目根目录创建 `.env.local` 文件：
+   ```env
+   VERCEL_ENV=
+   DEBUG=True
+   ```
+
+2. 本地环境特点：
+   - 使用基于文件的 SQLite 数据库（`gitscan.db`）
+   - 在 `repos/` 目录中持久化存储仓库
+   - 数据库和仓库在重启之间保持持久化
+
+3. 数据库位置：
+   - 数据库文件：项目根目录下的 `gitscan.db`
+   - 仓库存储：项目根目录下的 `repos/` 目录
+
+#### Vercel 部署环境
+
+1. 在 Vercel 项目设置中设置环境变量：
+   - 导航到 Project Settings > Environment Variables
+   - 添加变量：
+     ```
+     VERCEL_ENV=production
+     ```
+
+2. Vercel 环境特点：
+   - 使用内存中的 SQLite 数据库
+   - 使用临时目录存储仓库
+   - 数据在部署之间重置
+
+3. 重要注意事项：
+   - Vercel 环境中的数据不是持久化的
+   - 适用于演示和测试
+   - 如需生产环境使用，请考虑使用持久化存储解决方案
+
+#### 环境检测
+
+应用程序自动检测环境并配置自身：
+```python
+# 数据库配置
+if os.environ.get('VERCEL_ENV'):
+    # Vercel：使用内存数据库
+    DATABASE_URL = 'sqlite:///:memory:'
+else:
+    # 本地：使用文件数据库
+    DATABASE_URL = 'sqlite:///gitscan.db'
+
+# 仓库存储配置
+if os.environ.get('VERCEL_ENV'):
+    # Vercel：使用临时目录
+    REPOS_DIR = tempfile.mkdtemp()
+else:
+    # 本地：使用持久化目录
+    REPOS_DIR = os.path.join(BASE_DIR, 'repos')
+```
 
 ### 待办事项
 

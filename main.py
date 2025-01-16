@@ -4,23 +4,18 @@ from datetime import datetime, timedelta
 from git import Repo
 import tempfile
 import shutil
-import models
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
-from typing import Dict, Any
+from models import init_db, Base, Repository, Commit
 
 app = Flask(__name__, static_url_path='/static')
 
 # 初始化数据库
-engine, SessionLocal = models.init_db()
+engine, SessionLocal = init_db()
 
-# 挂载静态文件
-@app.route('/static/<path:path>')
-def send_static(path):
-    return send_from_directory('static', path)
+# 确保数据库表存在
+Base.metadata.create_all(bind=engine)
 
 # 创建仓库存储目录
-if os.environ.get('VERCEL_ENV'):
+if os.environ.get('VERCEL_ENV') == 'production':
     # Vercel 环境使用临时目录
     REPOS_DIR = tempfile.mkdtemp()
 else:
@@ -29,13 +24,25 @@ else:
     if not os.path.exists(REPOS_DIR):
         os.makedirs(REPOS_DIR)
 
+def get_db():
+    db = SessionLocal()
+    try:
+        return db
+    except:
+        db.close()
+        raise
+
 @app.route('/')
 def read_root():
     return send_from_directory('static', 'index.html')
 
+@app.route('/static/<path:path>')
+def send_static(path):
+    return send_from_directory('static', path)
+
 @app.route('/api/repositories', methods=['POST'])
-def add_repository() -> Dict[str, Any]:
-    db = SessionLocal()
+def add_repository():
+    db = get_db()
     try:
         # 从查询参数或表单数据中获取路径
         path = request.args.get('path') or request.form.get('path')
@@ -69,7 +76,7 @@ def add_repository() -> Dict[str, Any]:
             repo_name = os.path.basename(path)
 
         # 创建仓库记录
-        db_repo = models.Repository(
+        db_repo = Repository(
             name=repo_name,
             path=path,
             url=path if is_remote else None
@@ -79,15 +86,16 @@ def add_repository() -> Dict[str, Any]:
         
         return jsonify({"status": "success", "repository_id": db_repo.id})
     except Exception as e:
+        db.rollback()
         return jsonify({"error": str(e)}), 400
     finally:
         db.close()
 
 @app.route('/api/repositories', methods=['GET'])
 def list_repositories():
-    db = SessionLocal()
+    db = get_db()
     try:
-        repositories = db.query(models.Repository).all()
+        repositories = db.query(Repository).all()
         return jsonify([{
             'id': repo.id,
             'name': repo.name,
@@ -95,15 +103,17 @@ def list_repositories():
             'last_updated': repo.last_updated.isoformat() if repo.last_updated else None,
             'last_analyzed': repo.last_analyzed.isoformat() if repo.last_analyzed else None
         } for repo in repositories])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         db.close()
 
 @app.route('/api/stats/<int:repo_id>', methods=['GET'])
-def get_repository_stats(repo_id: int) -> Dict[str, Any]:
-    db = SessionLocal()
+def get_repository_stats(repo_id: int):
+    db = get_db()
     try:
         time_range = request.args.get('time_range', 'all')  # all, year, quarter, month, week, day
-        repo = db.query(models.Repository).filter(models.Repository.id == repo_id).first()
+        repo = db.query(Repository).filter(Repository.id == repo_id).first()
         if not repo:
             return jsonify({"error": "Repository not found"}), 404
         
@@ -123,11 +133,11 @@ def get_repository_stats(repo_id: int) -> Dict[str, Any]:
             start_date = None
         
         # 查询提交记录
-        commits_query = db.query(models.Commit).filter(
-            models.Commit.repository_id == repo_id
+        commits_query = db.query(Commit).filter(
+            Commit.repository_id == repo_id
         )
         if start_date:
-            commits_query = commits_query.filter(models.Commit.date >= start_date)
+            commits_query = commits_query.filter(Commit.date >= start_date)
         
         commits = commits_query.all()
         
@@ -181,9 +191,9 @@ def get_repository_stats(repo_id: int) -> Dict[str, Any]:
 
 @app.route('/api/analyze/<int:repo_id>', methods=['POST'])
 def analyze_repository(repo_id: int):
-    db = SessionLocal()
+    db = get_db()
     try:
-        repo = db.query(models.Repository).filter(models.Repository.id == repo_id).first()
+        repo = db.query(Repository).filter(Repository.id == repo_id).first()
         if not repo:
             return jsonify({"error": "Repository not found"}), 404
 
@@ -196,7 +206,7 @@ def analyze_repository(repo_id: int):
         for commit in git_repo.iter_commits():
             try:
                 stats = commit.stats.total
-                commits.append(models.Commit(
+                commits.append(Commit(
                     repository_id=repo.id,
                     hash=commit.hexsha,
                     author=commit.author.name,
@@ -210,7 +220,7 @@ def analyze_repository(repo_id: int):
                 continue
 
         # 清除旧的提交记录
-        db.query(models.Commit).filter(models.Commit.repository_id == repo.id).delete()
+        db.query(Commit).filter(Commit.repository_id == repo.id).delete()
         
         # 添加新的提交记录
         db.add_all(commits)
