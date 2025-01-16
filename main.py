@@ -1,22 +1,18 @@
 from flask import Flask, request, jsonify, send_from_directory
-from sqlalchemy.orm import sessionmaker
-from git import Repo
 import os
 from datetime import datetime, timedelta
-import models
-from sqlalchemy import create_engine
-from typing import Dict, Any
+from git import Repo
 import tempfile
 import shutil
+import models
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine
+from typing import Dict, Any
 
 app = Flask(__name__, static_url_path='/static')
 
-# 创建数据库引擎和会话
-engine = create_engine('sqlite:///gitscan.db')
-SessionLocal = sessionmaker(bind=engine)
-
-# 确保数据库表存在
-models.Base.metadata.create_all(engine)
+# 初始化数据库
+engine, SessionLocal = models.init_db()
 
 # 挂载静态文件
 @app.route('/static/<path:path>')
@@ -24,9 +20,14 @@ def send_static(path):
     return send_from_directory('static', path)
 
 # 创建仓库存储目录
-REPOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'repos')
-if not os.path.exists(REPOS_DIR):
-    os.makedirs(REPOS_DIR)
+if os.environ.get('VERCEL_ENV'):
+    # Vercel 环境使用临时目录
+    REPOS_DIR = tempfile.mkdtemp()
+else:
+    # 本地环境使用持久化目录
+    REPOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'repos')
+    if not os.path.exists(REPOS_DIR):
+        os.makedirs(REPOS_DIR)
 
 @app.route('/')
 def read_root():

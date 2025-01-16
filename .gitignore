@@ -25,6 +25,7 @@ wheels/
 venv/
 ENV/
 .env
+.env.local
 
 # IDE
 .idea/
@@ -56,6 +57,7 @@ instance/
 
 # Database
 *.db-journal
+gitscan.db
 
 # Logs
 *.log
