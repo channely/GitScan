@@ -15,22 +15,17 @@ engine, SessionLocal = init_db()
 Base.metadata.create_all(bind=engine)
 
 # 创建仓库存储目录
-if os.environ.get('VERCEL_ENV') == 'production':
-    # Vercel 环境使用临时目录
-    REPOS_DIR = tempfile.mkdtemp()
-else:
-    # 本地环境使用持久化目录
-    REPOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'repos')
-    if not os.path.exists(REPOS_DIR):
-        os.makedirs(REPOS_DIR)
+REPOS_DIR = tempfile.mkdtemp() if os.environ.get('VERCEL_ENV') == 'production' else os.path.join(os.path.dirname(os.path.abspath(__file__)), 'repos')
+if not os.path.exists(REPOS_DIR):
+    os.makedirs(REPOS_DIR)
 
 def get_db():
     db = SessionLocal()
     try:
         return db
-    except:
-        db.close()
-        raise
+    finally:
+        if os.environ.get('VERCEL_ENV') != 'production':
+            db.close()
 
 @app.route('/')
 def read_root():
@@ -38,7 +33,8 @@ def read_root():
 
 @app.route('/static/<path:path>')
 def send_static(path):
-    return send_from_directory('static', path)
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    return send_from_directory(static_dir, path)
 
 @app.route('/api/repositories', methods=['POST'])
 def add_repository():

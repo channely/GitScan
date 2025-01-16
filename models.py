@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Text
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import relationship, sessionmaker, scoped_session
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 import os
@@ -31,32 +31,44 @@ class Commit(Base):
     deletions = Column(Integer)
     repository = relationship("Repository", back_populates="commits")
 
-def get_db_url():
-    # 默认使用本地文件数据库
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gitscan.db')
-    db_url = f'sqlite:///{db_path}'
-    
-    # 仅在 Vercel 环境中使用内存数据库
-    if os.environ.get('VERCEL_ENV') == 'production':
-        db_url = 'sqlite:///:memory:'
-    
-    return db_url
+# 全局数据库引擎和会话工厂
+engine = None
+SessionLocal = None
 
 def init_db():
+    global engine, SessionLocal
+    
+    # 如果已经初始化，直接返回
+    if engine is not None:
+        return engine, SessionLocal
+    
+    # 根据环境选择数据库 URL
+    if os.environ.get('VERCEL_ENV') == 'production':
+        db_url = 'sqlite:///:memory:'
+    else:
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gitscan.db')
+        db_url = f'sqlite:///{db_path}'
+    
     # 创建数据库引擎
     engine = create_engine(
-        get_db_url(),
-        connect_args={'check_same_thread': False}  # 允许多线程访问
+        db_url,
+        connect_args={'check_same_thread': False}
     )
     
     # 创建会话工厂
-    SessionLocal = sessionmaker(
+    session_factory = sessionmaker(
         bind=engine,
         autocommit=False,
         autoflush=False
     )
     
-    # 确保所有表都已创建
-    Base.metadata.create_all(engine)
+    # 使用 scoped_session 来确保线程安全
+    SessionLocal = scoped_session(session_factory)
+    
+    # 创建所有表
+    Base.metadata.create_all(bind=engine)
     
     return engine, SessionLocal
+
+# 初始化数据库
+engine, SessionLocal = init_db()
